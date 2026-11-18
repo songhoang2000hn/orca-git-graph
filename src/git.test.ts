@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { git, hasLocalBranch, parseDiffTree, parseStatus, readWorktreeChanges } from './git.ts'
+import { git, hasLocalBranch, parseDiffTree, parseStatus, readCommitFileDiff, readWorktreeChanges } from './git.ts'
 
 const Z = '0000000000000000000000000000000000000000'
 const raw = (status: string) => `:100644 100644 ${Z} ${Z} ${status}`
@@ -108,6 +108,35 @@ test('reports whether a local branch exists without treating a remote ref as loc
 
     assert.equal(await hasLocalBranch(dir, 'feature/exists'), true)
     assert.equal(await hasLocalBranch(dir, 'remote-only'), false)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('reads a commit file diff and truncates it before returning it to the panel', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'orca-git-graph-diff-'))
+  try {
+    const run = (...args: string[]) => git(dir, args)
+    await run('init', '-q')
+    await run('config', 'user.email', 'test@example.com')
+    await run('config', 'user.name', 'Test')
+    await writeFile(join(dir, 'file.txt'), 'before\n')
+    await run('add', '.')
+    await run('commit', '-q', '-m', 'base')
+    await writeFile(join(dir, 'file.txt'), 'after\n')
+    await run('commit', '-am', 'change')
+    const hash = (await run('rev-parse', 'HEAD')).trim()
+
+    const full = await readCommitFileDiff(dir, hash, 'file.txt', 10_000)
+    assert.equal(full.kind, 'text')
+    assert.match(full.patch, /-before/)
+    assert.match(full.patch, /\+after/)
+    assert.equal(full.truncated, false)
+
+    const cut = await readCommitFileDiff(dir, hash, 'file.txt', 12)
+    assert.equal(cut.kind, 'text')
+    assert.equal(cut.patch.length, 12)
+    assert.equal(cut.truncated, true)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

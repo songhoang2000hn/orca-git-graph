@@ -9,6 +9,8 @@ import type {
   CommitDetails,
   DetailsLoad,
   FileChange,
+  FileDiff,
+  FileDiffLoad,
   GraphLoad,
   Ref,
   RepoInfo,
@@ -707,8 +709,17 @@ function renderWorktree(changes: WorktreeChanges): void {
 }
 
 /** Top-right of the details: the commit's actions (⋯, not for uncommitted changes) and close. */
-function detailsControls(withMenu = true): HTMLElement {
+function detailsControls(withMenu = true, onBack?: () => void): HTMLElement {
   const controls = el('div', 'details-controls')
+  if (onBack) {
+    const back = el('button', 'icon details-back')
+    back.type = 'button'
+    back.title = 'Back to commit details'
+    back.setAttribute('aria-label', back.title)
+    back.append(icon(ICONS.back))
+    back.addEventListener('click', onBack)
+    controls.append(back)
+  }
   const more = el('button', 'icon details-more')
   more.type = 'button'
   more.title = 'Actions (right-click a commit or badge, or Shift+F10)'
@@ -752,8 +763,44 @@ function renderDetails(d: CommitDetails): void {
 
   const grid = el('div', 'details-grid')
   const mergeBase = d.parents.length > 1 && d.comparedTo ? d.comparedTo : undefined
-  grid.append(info, renderFiles(d.files, d.filesTruncated, mergeBase))
+  grid.append(info, renderFiles(d.files, d.filesTruncated, mergeBase, (file) => void openFileDiff(d.hash, file)))
   morphDetails(() => detailsEl.replaceChildren(detailsControls(), grid))
+}
+
+async function openFileDiff(hash: string, file: FileChange): Promise<void> {
+  if (!repo) return
+  const mine = ++detailsSeq
+  renderDetailsMessage('pending', 'Loading diff…')
+  try {
+    const result: FileDiffLoad = await orca.plugin.request('commit.fileDiff', { path: repo.path, hash, filePath: file.path })
+    if (mine !== detailsSeq || selected !== hash) return
+    if (!result.ok) return renderDetailsMessage('error', result.message)
+    renderFileDiff(hash, file, result.diff)
+  } catch (error) {
+    if (mine === detailsSeq) renderDetailsMessage('error', (error as Error).message)
+  }
+}
+
+function renderFileDiff(hash: string, file: FileChange, diff: FileDiff): void {
+  const viewer = el('div', 'details-diff')
+  viewer.append(el('div', 'diff-title mono', file.path))
+  if (diff.kind === 'binary') {
+    viewer.append(el('p', 'pending', 'Binary file: no text diff is available.'))
+  } else {
+    const patch = el('pre', 'diff-patch')
+    for (const line of diff.patch.split('\n')) {
+      const cls = line.startsWith('@@') ? 'hunk' : line.startsWith('+') && !line.startsWith('+++') ? 'added' : line.startsWith('-') && !line.startsWith('---') ? 'deleted' : ''
+      patch.append(el('span', cls, line), '\n')
+    }
+    viewer.append(patch)
+    if (diff.truncated) viewer.append(el('p', 'pending', 'Diff was truncated to keep the panel responsive.'))
+  }
+  const back = () => {
+    const details = detailsCache.get(hash)
+    if (details) renderDetails(details)
+    else void loadDetails(hash)
+  }
+  morphDetails(() => detailsEl.replaceChildren(detailsControls(false, back), viewer))
 }
 
 function person(name: string, email: string): Node[] {
@@ -821,7 +868,7 @@ const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensiti
 const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1)
 
 /** Folders first, then files, each by name; every folder folds on click. */
-function renderFolderContents(folder: Folder): HTMLElement {
+function renderFolderContents(folder: Folder, onOpenFile?: (file: FileChange) => void): HTMLElement {
   const list = el('ul', 'tree')
   for (const child of [...folder.folders.values()].sort((a, b) => byName(a.name, b.name))) {
     const { label, folder: shown } = compact(child)
@@ -830,7 +877,7 @@ function renderFolderContents(folder: Folder): HTMLElement {
     toggle.type = 'button'
     toggle.setAttribute('aria-expanded', 'true')
     toggle.append(chevron(), treeIcon('folder'), el('span', 'name', label))
-    const contents = renderFolderContents(shown)
+    const contents = renderFolderContents(shown, onOpenFile)
     toggle.addEventListener('click', () => {
       const open = toggle.getAttribute('aria-expanded') !== 'true'
       toggle.setAttribute('aria-expanded', String(open))
@@ -851,12 +898,12 @@ function renderFolderContents(folder: Folder): HTMLElement {
     list.append(item)
   }
   for (const file of [...folder.files].sort((a, b) => byName(baseName(a.path), baseName(b.path)))) {
-    list.append(renderFile(file))
+    list.append(renderFile(file, onOpenFile))
   }
   return list
 }
 
-function renderFile(file: FileChange): HTMLElement {
+function renderFile(file: FileChange, onOpenFile?: (file: FileChange) => void): HTMLElement {
   const item = el('li', `tree-row file s-${file.status}${file.untracked ? ' untracked' : ''}`)
   const what = file.untracked ? 'Untracked' : STATUS_NAMES[file.status]
   item.title = `${what}: ${file.from ? `${file.from} → ${file.path}` : file.path}`
@@ -868,6 +915,18 @@ function renderFile(file: FileChange): HTMLElement {
     item.append(stat)
   } else {
     item.append(el('span', 'stat', 'binary'))
+  }
+  if (onOpenFile) {
+    item.tabIndex = 0
+    item.setAttribute('role', 'button')
+    item.setAttribute('aria-label', `Open diff for ${file.path}`)
+    item.addEventListener('click', () => onOpenFile(file))
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        onOpenFile(file)
+      }
+    })
   }
   return item
 }
@@ -885,7 +944,7 @@ function treeIcon(kind: 'folder' | 'file'): SVGSVGElement {
 }
 
 /** `mergeBase` labels a merge's list with the first parent it is compared with. */
-function renderFiles(files: FileChange[], truncated: boolean, mergeBase?: string): HTMLElement {
+function renderFiles(files: FileChange[], truncated: boolean, mergeBase?: string, onOpenFile?: (file: FileChange) => void): HTMLElement {
   const section = el('div', 'details-files')
   const added = files.reduce((sum, f) => sum + (f.added ?? 0), 0)
   const deleted = files.reduce((sum, f) => sum + (f.deleted ?? 0), 0)
@@ -902,7 +961,7 @@ function renderFiles(files: FileChange[], truncated: boolean, mergeBase?: string
     section.append(el('p', 'pending', 'No file changes.'))
     return section
   }
-  section.append(renderFolderContents(buildTree(files)))
+  section.append(renderFolderContents(buildTree(files), onOpenFile))
   if (truncated) section.append(el('p', 'pending', `Only the first ${files.length} files are listed.`))
   return section
 }

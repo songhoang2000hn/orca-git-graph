@@ -397,6 +397,33 @@ button {
   margin: 0;
 }
 
+.details-diff {
+  min-width: 0;
+}
+
+.diff-title {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.diff-patch {
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--surface-line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  white-space: pre;
+}
+
+.diff-patch span {
+  display: block;
+}
+
+.diff-patch .added { color: var(--lane-2); }
+.diff-patch .deleted { color: var(--orca-destructive, #ef4444); }
+.diff-patch .hunk { color: var(--orca-primary, #3b82f6); }
+
 .mono {
   font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
   font-size: 11px;
