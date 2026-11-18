@@ -42,7 +42,7 @@ export function sshArgs(target: string, command: string[]): string[] {
   const share =
     process.platform === 'win32'
       ? []
-      : ['-o', 'ControlMaster=auto', '-o', 'ControlPath=~/.ssh/finline-%C', '-o', 'ControlPersist=300']
+      : ['-o', 'ControlMaster=auto', '-o', 'ControlPath=~/.ssh/orca-git-graph-%C', '-o', 'ControlPersist=300']
   return [
     '-o', 'BatchMode=yes',
     '-o', 'ConnectTimeout=10',

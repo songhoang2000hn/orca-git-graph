@@ -121,7 +121,7 @@ async function inTerminal(action: GitAction): Promise<void> {
   if (!path) return
   try {
     const result = await orca.plugin.request('git.terminal', { path, action })
-    if (result.ok) toast({ tone: 'info', title: 'Opened in a terminal', detail: 'Finline refreshes when it finishes.' })
+    if (result.ok) toast({ tone: 'info', title: 'Opened in a terminal', detail: 'orca-git-graph refreshes when it finishes.' })
     else toast({ tone: 'error', title: 'Could not open a terminal', detail: result.message })
   } catch (error) {
     toast({ tone: 'error', title: 'Could not open a terminal', detail: (error as Error).message })

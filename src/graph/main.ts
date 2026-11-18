@@ -1,4 +1,4 @@
-// Finline graph panel: an isolated HTML frame that draws the commit graph in SVG beside the
+// orca-git-graph panel: an isolated HTML frame that draws the commit graph in SVG beside the
 // commit list. It talks to the worker with orca.plugin.request and refreshes when the worker
 // posts `repo.changed` or Orca reports `workspace.changed`. Git actions live in actions.ts.
 import { edgePath, layoutGraph, type Layout } from '../layout.ts'
@@ -27,9 +27,9 @@ const COL_W = 14
 const PAD_X = 10
 const NODE_R = 4
 const LANE_COLORS = 8
-const PINS_KEY = 'finline.pins'
+const PINS_KEY = 'orca-git-graph.pins'
 const MAX_PINS = 200
-const SSH_KEY = 'finline.ssh'
+const SSH_KEY = 'orca-git-graph.ssh'
 // Same rule as the worker's: an ssh alias or [user@]host[:port], never an option.
 const SSH_TARGET = /^(?!-)[A-Za-z0-9._@%+\[\]:-]{1,255}$/
 
@@ -115,7 +115,7 @@ async function unpin(): Promise<void> {
 }
 
 // ---- SSH hosts: how to reach each one with ssh ---------------------------------------------
-// Orca names a remote host only by an id (`ssh:<connection>`), so the person tells Finline once
+// Orca names a remote host only by an id (`ssh:<connection>`), so the person tells orca-git-graph once
 // which ssh destination reaches it. Kept per host id, for every workspace on that host.
 
 function readSshTargets(): Record<string, string> {
@@ -144,7 +144,7 @@ async function askSshTarget(hostId: string, current?: string): Promise<void> {
   const answer = await openDialog({
     title: 'Reach this SSH host',
     text:
-      'The ssh destination for this host, as you would type it after ssh in a terminal on this computer: an alias from ~/.ssh/config or user@host. Finline runs git there without prompts, so the login must work with a key or the ssh agent.',
+      'The ssh destination for this host, as you would type it after ssh in a terminal on this computer: an alias from ~/.ssh/config or user@host. orca-git-graph runs git there without prompts, so the login must work with a key or the ssh agent.',
     fields: [
       {
         kind: 'text',
@@ -369,7 +369,7 @@ function showError(error: unknown): void {
 }
 
 function showPicker(text: string, candidates: Candidate[]): void {
-  showMessage('Which repository is this workspace?', `${text} Pick it once; Finline remembers.`, 'warning')
+  showMessage('Which repository is this workspace?', `${text} Pick it once; orca-git-graph remembers.`, 'warning')
   for (const candidate of candidates) {
     const button = el('button', '', candidate.name)
     button.type = 'button'
@@ -388,10 +388,10 @@ function showPicker(text: string, candidates: Candidate[]): void {
 const laneColor = (i: number) => `var(--lane-${i % LANE_COLORS})`
 
 function renderHeader(): void {
-  repoEl.textContent = repo?.name ?? 'Finline'
+  repoEl.textContent = repo?.name ?? 'orca-git-graph'
   repoEl.title = repo?.ssh ? `${repo.path} on ssh ${repo.ssh}` : (repo?.path ?? '')
   sshHostEl.hidden = !repo?.ssh
-  sshHostEl.title = repo?.ssh ? `On SSH host ${repo.ssh}: change how Finline reaches it` : ''
+  sshHostEl.title = repo?.ssh ? `On SSH host ${repo.ssh}: change how orca-git-graph reaches it` : ''
   sshHostEl.setAttribute('aria-label', sshHostEl.title)
   branchEl.hidden = !repo?.branch
   branchEl.textContent = repo?.branch ?? ''

@@ -56,7 +56,7 @@ test('status counts staged, unstaged, untracked and conflicted paths', () => {
 })
 
 test('worktree changes list staged, unstaged and untracked files against HEAD', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'finline-wt-'))
+  const dir = await mkdtemp(join(tmpdir(), 'orca-git-graph-wt-'))
   try {
     const run = (...args: string[]) => git(dir, args)
     await run('init', '-q')

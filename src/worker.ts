@@ -1,4 +1,4 @@
-// Finline's worker: finds the focused workspace's repository, reads it with the system `git`,
+// orca-git-graph's worker: finds the focused workspace's repository, reads it with the system `git`,
 // runs the git actions the panel asks for, and watches the git dir so open panels refresh.
 // A workspace on an SSH host runs the same git commands through the system `ssh`, and is
 // polled instead of watched.
@@ -100,7 +100,7 @@ function locate(
 ): Resolved {
   if (isLocal(w.hostId)) return { ok: true, loc: { path: w.path, ssh: null }, hostId: w.hostId, resolvedBy }
   if (!isSsh(w.hostId) && !w.hostId?.startsWith('runtime:')) {
-    return { ok: false, reason: 'remote', message: `"${w.name}" runs on ${w.hostId}, which Finline cannot reach yet.` }
+    return { ok: false, reason: 'remote', message: `"${w.name}" runs on ${w.hostId}, which orca-git-graph cannot reach yet.` }
   }
   const hostId = w.hostId as string
   const target = sshTargets[hostId]
@@ -109,7 +109,7 @@ function locate(
       ok: false,
       reason: 'ssh-target',
       hostId,
-      message: `"${w.name}" is on an SSH host. Tell Finline how to reach it with ssh, as you would in a terminal.`
+      message: `"${w.name}" is on an SSH host. Tell orca-git-graph how to reach it with ssh, as you would in a terminal.`
     }
   }
   return { ok: true, loc: { path: w.path, ssh: target }, hostId, resolvedBy: `${resolvedBy} via ssh ${target}` }
@@ -192,7 +192,7 @@ async function findUnlisted(
       ok: false,
       reason: 'ssh-target',
       hostId: UNLISTED,
-      message: `Orca does not list "${name}" to plugins, so it is probably on an SSH host. Tell Finline how to reach that host with ssh, as you would in a terminal.`
+      message: `Orca does not list "${name}" to plugins, so it is probably on an SSH host. Tell orca-git-graph how to reach that host with ssh, as you would in a terminal.`
     }
   }
   const fromId = id ? /^[^/]*::(\/.+)$/.exec(id)?.[1] : undefined
@@ -223,7 +223,7 @@ async function findUnlisted(
           message:
             found.length === 0
               ? `Orca on ${target} has no workspace "${name}" on ${branch ?? 'no branch'}. Is it on another host?`
-              : `Orca on ${target} has ${found.length} workspaces "${name}" on ${branch}; Finline cannot tell them apart yet.`
+              : `Orca on ${target} has ${found.length} workspaces "${name}" on ${branch}; orca-git-graph cannot tell them apart yet.`
         }
       }
       path = found[0].path
@@ -474,7 +474,7 @@ export default function activate(orca: OrcaWorkerApi): void {
     // quoting is enough for any shell the terminal runs.
     const quote = (arg: string) => (/^[\w.\/@:+=-]+$/.test(arg) ? arg : `"${arg}"`)
     const command = ['git', ...built.args].map(quote).join(' ')
-    await orca.host.call('terminal.create', { workspaceId: workspace.id, title: `Finline: git ${built.args[0]}`, command })
+    await orca.host.call('terminal.create', { workspaceId: workspace.id, title: `orca-git-graph: git ${built.args[0]}`, command })
     return { ok: true }
   })
 

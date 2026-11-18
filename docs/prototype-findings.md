@@ -1,5 +1,8 @@
 # Prototype findings (2026-11-04, Orca 1.4.248, Windows 11)
 
+This work is based on [dennib/finline](https://github.com/dennib/finline) version **0.3.1** as a
+reference and starting point, with further development in this repository.
+
 What the first prototype (worker + components panel listing the latest commits) established.
 
 ## The five unknowns from the handoff

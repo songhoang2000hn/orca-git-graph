@@ -1,16 +1,16 @@
 {
   "manifestVersion": 2,
-  "id": "finline",
-  "name": "Finline",
-  "version": "0.3.2",
+  "id": "orca-git-graph",
+  "name": "orca-git-graph",
+  "version": "0.0.1",
   "description": "Git graph for the active worktree: branches, tags and remotes in colored lanes, commit details, and git actions from a right-click.",
   "author": {
-    "name": "Denni Bevilacqua",
-    "url": "https://github.com/dennib"
+    "name": "Song Hoang",
+    "url": "https://github.com/songhoang2000hn"
   },
   "license": "MIT",
   "icon": "assets/icon.png",
-  "repository": "https://github.com/dennib/finline",
+  "repository": "https://github.com/songhoang2000hn/orca-git-graph",
   "engines": {
     "orca": ">=1.4.248"
   },
@@ -21,7 +21,7 @@
     "panels": [
       {
         "id": "graph",
-        "title": "Finline",
+        "title": "orca-git-graph",
         "icon": "branch",
         "entry": "src/graph/index.html",
         "ui": "html"
@@ -41,17 +41,17 @@
   ],
   "cover": {
     "path": "assets/cover.png",
-    "alt": "Finline: a git graph for Orca, beside the panel showing a repository with branches, merges, tags and uncommitted changes"
+    "alt": "orca-git-graph: a git graph for Orca, beside the panel showing a repository with branches, merges, tags and uncommitted changes"
   },
   "screenshots": [
     {
       "path": "assets/screenshot-graph.png",
-      "alt": "The Finline panel with colored lanes, branch, remote and tag badges, and an expanded uncommitted changes row listing the changed files",
+      "alt": "The orca-git-graph panel with colored lanes, branch, remote and tag badges, and an expanded uncommitted changes row listing the changed files",
       "caption": "Every branch, and what's not committed yet"
     },
     {
       "path": "assets/screenshot-sidebar.png",
-      "alt": "The Finline panel with the right-click menu of a branch badge open: check out, merge, rebase, push, rename, delete and copy name",
+      "alt": "The orca-git-graph panel with the right-click menu of a branch badge open: check out, merge, rebase, push, rename, delete and copy name",
       "caption": "Git actions a right-click away"
     }
   ]

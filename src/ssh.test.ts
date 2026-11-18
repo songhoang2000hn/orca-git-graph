@@ -58,7 +58,7 @@ async function fakeSsh(dir: string): Promise<string> {
 }
 
 test('git runs on an SSH host through ssh, with paths and arguments quoted', { skip: process.platform === 'win32' }, async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'finline-ssh-'))
+  const dir = await mkdtemp(join(tmpdir(), 'orca-git-graph-ssh-'))
   const savedPath = process.env.PATH
   try {
     process.env.PATH = `${await fakeSsh(dir)}:${savedPath}`
@@ -102,7 +102,7 @@ test('git runs on an SSH host through ssh, with paths and arguments quoted', { s
 })
 
 test('an unreachable SSH host is an SshError, not a git failure', { skip: process.platform === 'win32' }, async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'finline-ssh-'))
+  const dir = await mkdtemp(join(tmpdir(), 'orca-git-graph-ssh-'))
   const savedPath = process.env.PATH
   try {
     process.env.PATH = `${await fakeSsh(dir)}:${savedPath}`
