@@ -53,6 +53,32 @@ body {
   flex: none;
 }
 
+.find {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.find input {
+  min-width: 0;
+  flex: 1;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.find span {
+  min-width: 44px;
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
 .repo {
   font-weight: 600;
   font-size: 13px;
@@ -267,6 +293,9 @@ button {
 .row[aria-selected='true'] {
   background: var(--selected);
 }
+
+.row.find-match { background: color-mix(in srgb, var(--lane-1) 12%, transparent); }
+.row.find-current { outline: 1px solid var(--lane-1); outline-offset: -1px; }
 
 .subject {
   flex: 1;

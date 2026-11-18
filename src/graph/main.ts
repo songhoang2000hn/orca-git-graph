@@ -3,6 +3,7 @@
 // posts `repo.changed` or Orca reports `workspace.changed`. Git actions live in actions.ts.
 import { edgePath, layoutGraph, type Layout } from '../layout.ts'
 import { formatCommitDate } from '../format.ts'
+import { findCommitHashes } from '../search.ts'
 import type {
   Candidate,
   Commit,
@@ -42,6 +43,13 @@ const branchEl = $<HTMLElement>('branch')
 const refreshEl = $<HTMLButtonElement>('refresh')
 const switchRepoEl = $<HTMLButtonElement>('switch-repo')
 const sshHostEl = $<HTMLButtonElement>('ssh-host')
+const searchEl = $<HTMLButtonElement>('search')
+const findEl = $<HTMLElement>('find')
+const findInputEl = $<HTMLInputElement>('find-input')
+const findCountEl = $<HTMLElement>('find-count')
+const findPreviousEl = $<HTMLButtonElement>('find-previous')
+const findNextEl = $<HTMLButtonElement>('find-next')
+const findCloseEl = $<HTMLButtonElement>('find-close')
 const messageEl = $<HTMLElement>('message')
 const listEl = $<HTMLElement>('list')
 const graphEl = $<SVGSVGElement>('graph')
@@ -60,6 +68,8 @@ let selected: string | null = null
 let seq = 0
 let loading = false
 let loadingMore = false
+let findMatches: string[] = []
+let findIndex = -1
 
 // ---- Pinning: which repo a workspace is, when name + branch match several ---------------------
 // readContext has no workspace id, but terminal ids are unique, so the pin is keyed by them.
@@ -446,6 +456,7 @@ function renderList(): void {
     )
   }
   placeDetails()
+  updateFindMatches(true)
 }
 
 /**
@@ -975,6 +986,40 @@ function maybeLoadMore(): void {
   if (listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - ROW_H * 10) void loadMore()
 }
 
+function updateFindMatches(keepCurrent = false): void {
+  const current = keepCurrent ? findMatches[findIndex] : undefined
+  findMatches = findCommitHashes(commits, findInputEl.value)
+  findIndex = current ? findMatches.indexOf(current) : findMatches.length > 0 ? 0 : -1
+  if (findIndex < 0 && findMatches.length > 0) findIndex = 0
+  const matched = new Set(findMatches)
+  for (const row of rowsEl.querySelectorAll<HTMLElement>('.row')) {
+    row.classList.toggle('find-match', matched.has(row.dataset.hash ?? ''))
+    row.classList.toggle('find-current', row.dataset.hash === findMatches[findIndex])
+  }
+  findCountEl.textContent = findInputEl.value.trim() ? (findIndex >= 0 ? `${findIndex + 1} of ${findMatches.length}` : 'No matches') : ''
+}
+
+function moveFind(step: number): void {
+  if (findMatches.length === 0) return
+  findIndex = (findIndex + step + findMatches.length) % findMatches.length
+  updateFindMatches(true)
+  rowOf(findMatches[findIndex])?.scrollIntoView({ block: 'center', behavior: moving() ? 'smooth' : 'auto' })
+}
+
+function openFind(): void {
+  findEl.hidden = false
+  findInputEl.focus()
+  findInputEl.select()
+  updateFindMatches(true)
+}
+
+function closeFind(): void {
+  findEl.hidden = true
+  findInputEl.value = ''
+  updateFindMatches()
+  listEl.focus()
+}
+
 rowsEl.addEventListener('click', (event) => {
   if ((event.target as Element).closest('.ref')) return
   const row = (event.target as Element).closest<HTMLElement>('.row')
@@ -1040,6 +1085,16 @@ listEl.addEventListener('keydown', (event) => {
 })
 
 document.addEventListener('keydown', (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+    event.preventDefault()
+    openFind()
+    return
+  }
+  if (event.key === 'Escape' && !findEl.hidden) {
+    event.preventDefault()
+    closeFind()
+    return
+  }
   // A menu or dialog that handled Escape already marked it.
   if (event.key === 'Escape' && selected && !event.defaultPrevented) {
     select(null)
@@ -1054,6 +1109,24 @@ switchRepoEl.addEventListener('click', () => void unpin())
 sshHostEl.append(icon(ICONS.server))
 sshHostEl.addEventListener('click', () => {
   if (repo?.ssh && repo.hostId) void askSshTarget(repo.hostId, repo.ssh)
+})
+searchEl.append(icon(ICONS.search))
+searchEl.addEventListener('click', openFind)
+findPreviousEl.append(icon(ICONS.up))
+findPreviousEl.addEventListener('click', () => moveFind(-1))
+findNextEl.append(icon(ICONS.down))
+findNextEl.addEventListener('click', () => moveFind(1))
+findCloseEl.append(icon(ICONS.close))
+findCloseEl.addEventListener('click', closeFind)
+findInputEl.addEventListener('input', () => {
+  updateFindMatches()
+  if (findMatches.length > 0) moveFind(0)
+})
+findInputEl.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    moveFind(event.shiftKey ? -1 : 1)
+  }
 })
 
 orca.plugin.on('repo.changed', () => void refresh())
