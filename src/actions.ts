@@ -49,6 +49,11 @@ export function changesWorktree(action: GitAction): boolean {
   }
 }
 
+/** A remote checkout must never recreate a same-named local branch. */
+export function resolveCheckoutAction(action: GitAction, localExists: boolean): GitAction {
+  return action.kind === 'checkoutRemote' && localExists ? { kind: 'checkout', branch: action.local } : action
+}
+
 export interface BuildContext {
   /** Remote names of the repository; remote actions must name one of them. */
   remotes: readonly string[]

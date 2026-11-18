@@ -7,12 +7,13 @@ import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { OrcaWorkerApi } from 'orca/worker'
-import { AUTH_FAILURE, buildArgs, CONFLICT, isRemoteAction } from './actions'
+import { AUTH_FAILURE, buildArgs, CONFLICT, isRemoteAction, resolveCheckoutAction } from './actions'
 import {
   currentBranch,
   git,
   gitDirs,
   gitVersion,
+  hasLocalBranch,
   hostWorktrees,
   isSshTarget,
   type Loc,
@@ -437,7 +438,12 @@ export default function activate(orca: OrcaWorkerApi): void {
     if (running.has(path)) return { ok: false, reason: 'invalid', message: 'Another git action is still running.' }
     running.add(path)
     try {
-      const built = buildArgs(action, { remotes: await remoteNames(loc) })
+      const remotes = await remoteNames(loc)
+      const initial = buildArgs(action, { remotes })
+      if (!initial.ok) return { ok: false, reason: 'invalid', message: initial.message }
+      const effective =
+        action.kind === 'checkoutRemote' ? resolveCheckoutAction(action, await hasLocalBranch(loc, action.local, signal)) : action
+      const built = effective === action ? initial : buildArgs(effective, { remotes })
       if (!built.ok) return { ok: false, reason: 'invalid', message: built.message }
       const remote = isRemoteAction(action)
       orca.log(`git ${built.args.join(' ')}`)

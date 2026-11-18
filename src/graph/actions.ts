@@ -521,6 +521,32 @@ export function refMenu(ref: Ref, remotes: string[], commit: Commit, at: { x: nu
   openMenu(localBranchEntries(ref.name, remotes, status), at, options)
 }
 
+/** Double-click checkout for a branch badge. Remote branches safely reuse an existing local branch. */
+export function checkoutRef(ref: Ref): void {
+  const status = host.status()
+  if (!status || stoppedOperation()) return
+  if (ref.kind === 'head' || ref.kind === 'branch') {
+    if (ref.name === status.branch) return
+    void guarded({
+      title: `Check out ${ref.name}`,
+      confirm: 'Check out',
+      build: () => ({ kind: 'checkout', branch: ref.name }),
+      labels: () => ({ busy: `Checking out ${ref.name}…`, done: `Checked out ${ref.name}` })
+    })
+    return
+  }
+  if (ref.kind !== 'remote') return
+  const split = splitRemote(ref.name, status.remotes)
+  if (!split) return
+  void guarded({
+    title: `Check out ${ref.name}`,
+    text: `Checks out the existing local ${split.branch} branch, or creates it to track ${ref.name}.`,
+    confirm: 'Check out',
+    build: () => ({ kind: 'checkoutRemote', remoteBranch: ref.name, local: split.branch }),
+    labels: () => ({ busy: `Checking out ${ref.name}…`, done: `Checked out ${split.branch}` })
+  })
+}
+
 function localBranchEntries(name: string, twins: string[], status: RepoStatus): MenuEntry[] {
   const current = status.branch
   const isCurrent = name === current

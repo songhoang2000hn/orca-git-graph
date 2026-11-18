@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { git, parseDiffTree, parseStatus, readWorktreeChanges } from './git.ts'
+import { git, hasLocalBranch, parseDiffTree, parseStatus, readWorktreeChanges } from './git.ts'
 
 const Z = '0000000000000000000000000000000000000000'
 const raw = (status: string) => `:100644 100644 ${Z} ${Z} ${status}`
@@ -88,6 +88,26 @@ test('worktree changes list staged, unstaged and untracked files against HEAD', 
     const capped = await readWorktreeChanges(dir, 2)
     assert.equal(capped.files.length, 2)
     assert.equal(capped.filesTruncated, true)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('reports whether a local branch exists without treating a remote ref as local', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'orca-git-graph-branch-'))
+  try {
+    const run = (...args: string[]) => git(dir, args)
+    await run('init', '-q')
+    await run('config', 'user.email', 'test@example.com')
+    await run('config', 'user.name', 'Test')
+    await writeFile(join(dir, 'file.txt'), 'base\n')
+    await run('add', '.')
+    await run('commit', '-q', '-m', 'init')
+    await run('branch', 'feature/exists')
+    await run('update-ref', 'refs/remotes/origin/remote-only', 'HEAD')
+
+    assert.equal(await hasLocalBranch(dir, 'feature/exists'), true)
+    assert.equal(await hasLocalBranch(dir, 'remote-only'), false)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

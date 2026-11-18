@@ -16,7 +16,7 @@ import type {
   WorktreeChanges,
   WorktreeLoad
 } from '../types.ts'
-import { commitMenu, createToolbar, initActions, refMenu, renderBanner } from './actions.ts'
+import { checkoutRef, commitMenu, createToolbar, initActions, refMenu, renderBanner } from './actions.ts'
 import { el, icon, ICONS, moving, svg } from './dom.ts'
 import { orca } from './frame.ts'
 import { openDialog } from './overlay.ts'
@@ -539,6 +539,7 @@ function renderRefs(refs: Ref[], color: number): HTMLElement[] {
     badgeRefs.set(node, { ref, remotes: remoteNames })
     node.style.color = laneColor(color)
     node.title = [ref.name, ...remoteNames.map((r) => `${r}/${ref.name}`)].join(', ')
+    if (ref.kind === 'head' || ref.kind === 'branch' || ref.kind === 'remote') node.append(icon(ICONS.branch, 'ref-icon'))
     node.append(el('span', 'name', label))
     for (const remote of remoteNames) node.append(el('span', 'remote', remote))
     badges.push(node)
@@ -941,9 +942,19 @@ function maybeLoadMore(): void {
 }
 
 rowsEl.addEventListener('click', (event) => {
+  if ((event.target as Element).closest('.ref')) return
   const row = (event.target as Element).closest<HTMLElement>('.row')
   // Clicking the open commit again folds its details.
   if (row?.dataset.hash) select(row.dataset.hash === selected ? null : row.dataset.hash)
+})
+
+rowsEl.addEventListener('dblclick', (event) => {
+  const badge = (event.target as Element).closest('.ref')
+  const info = badge ? badgeRefs.get(badge) : undefined
+  if (!info || !['head', 'branch', 'remote'].includes(info.ref.kind)) return
+  event.preventDefault()
+  event.stopPropagation()
+  checkoutRef(info.ref)
 })
 
 // Right-click: a badge opens its ref's menu, anywhere else on a row the commit's. It leaves the

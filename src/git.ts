@@ -282,6 +282,12 @@ export async function remoteNames(at: string | Loc): Promise<string[]> {
   return (await git(at, ['remote'])).split(/\r?\n/).filter(Boolean)
 }
 
+/** Whether `name` is already a local branch (remote-tracking refs do not count). */
+export async function hasLocalBranch(at: string | Loc, name: string, signal?: AbortSignal): Promise<boolean> {
+  const result = await runGit(at, ['show-ref', '--verify', '--quiet', `refs/heads/${name}`], { timeoutMs: 10_000, signal })
+  return result.code === 0
+}
+
 /** Splits a `%D` decoration list into typed refs. */
 export function parseRefs(decorations: string, remotes: readonly string[]): Ref[] {
   if (!decorations) return []

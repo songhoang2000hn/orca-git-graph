@@ -33,6 +33,7 @@ export const ICONS = {
   warning: 'M8 2.5l6 11H2zM8 7v3M8 12h.01',
   check: 'M3.5 8.5l3 3 6-7',
   server: 'M2.5 3h11v4h-11zM2.5 9h11v4h-11zM5 5h.01M5 11h.01',
+  branch: 'M4 3.5v9M4 5.5h5a2 2 0 0 0 2-2v-1M4 10.5h5a2 2 0 0 1 2 2v1M11 2.5h.01M11 13.5h.01',
   switch: 'M3 5.5h9.5M10 3l2.5 2.5L10 8M13 10.5H3.5M6 8l-2.5 2.5L6 13'
 }
 
