@@ -1,6 +1,6 @@
 {
   "manifestVersion": 2,
-  "id": "orca-git-graph",
+  "id": "finline-git-graph",
   "name": "orca-git-graph",
   "version": "0.0.2",
   "description": "Git graph for the active worktree: branches, tags and remotes in colored lanes, commit details, and git actions from a right-click.",
