@@ -360,6 +360,9 @@ button {
   line-height: 16px;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .ref .name {
@@ -608,6 +611,10 @@ button {
 }
 
 button.tree-row {
+  cursor: pointer;
+}
+
+.tree-row.file[role='button'] {
   cursor: pointer;
 }
 
