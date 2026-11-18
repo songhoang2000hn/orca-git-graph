@@ -247,7 +247,7 @@ button {
 .commit-header,
 .row {
   display: grid;
-  grid-template-columns: var(--graph-col, 40px) minmax(var(--description-col, 240px), 1fr) var(--date-col, 180px) var(--author-col, 160px) var(--commit-col, 100px);
+  grid-template-columns: var(--graph-col, 40px) var(--description-col, 240px) var(--date-col, 180px) var(--author-col, 160px) var(--commit-col, 100px);
   min-width: max-content;
 }
 

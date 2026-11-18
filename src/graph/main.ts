@@ -3,7 +3,7 @@
 // posts `repo.changed` or Orca reports `workspace.changed`. Git actions live in actions.ts.
 import { edgePath, layoutGraph, type Layout } from '../layout.ts'
 import { formatCommitDate } from '../format.ts'
-import { clampColumnWidth, type ColumnName } from '../columns.ts'
+import { clampColumnWidth, resolveColumnWidths, type ColumnName } from '../columns.ts'
 import { findCommitHashes } from '../search.ts'
 import type {
   Candidate,
@@ -77,12 +77,12 @@ const columnWidths: Partial<Record<ColumnName, number>> = (() => {
   try { return JSON.parse(localStorage.getItem(COLUMN_KEY) ?? '{}') ?? {} } catch { return {} }
 })()
 
-function graphColumnWidth(): number { return Math.max(graphWidth, columnWidths.graph ?? graphWidth) }
+function resolvedColumnWidths(): Record<ColumnName, number> {
+  return resolveColumnWidths(listEl.clientWidth, columnWidths, graphWidth)
+}
+function graphColumnWidth(): number { return resolvedColumnWidths().graph }
 function applyColumns(): void {
-  const values: Record<ColumnName, number> = {
-    graph: graphColumnWidth(), description: columnWidths.description ?? 240, date: columnWidths.date ?? 180,
-    author: columnWidths.author ?? 160, commit: columnWidths.commit ?? 100
-  }
+  const values = resolvedColumnWidths()
   for (const [name, width] of Object.entries(values)) listEl.style.setProperty(`--${name}-col`, `${width}px`)
 }
 function saveColumn(column: ColumnName, width: number): void {
