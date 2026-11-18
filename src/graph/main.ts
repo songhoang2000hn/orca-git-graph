@@ -2,12 +2,16 @@
 // commit list. It talks to the worker with orca.plugin.request and refreshes when the worker
 // posts `repo.changed` or Orca reports `workspace.changed`. Git actions live in actions.ts.
 import { edgePath, layoutGraph, type Layout } from '../layout.ts'
+import { formatCommitDate } from '../format.ts'
+import { findCommitHashes } from '../search.ts'
 import type {
   Candidate,
   Commit,
   CommitDetails,
   DetailsLoad,
   FileChange,
+  FileDiff,
+  FileDiffLoad,
   GraphLoad,
   Ref,
   RepoInfo,
@@ -16,7 +20,7 @@ import type {
   WorktreeChanges,
   WorktreeLoad
 } from '../types.ts'
-import { commitMenu, createToolbar, initActions, refMenu, renderBanner } from './actions.ts'
+import { checkoutRef, commitMenu, createToolbar, initActions, refMenu, renderBanner } from './actions.ts'
 import { el, icon, ICONS, moving, svg } from './dom.ts'
 import { orca } from './frame.ts'
 import { openDialog } from './overlay.ts'
@@ -39,6 +43,13 @@ const branchEl = $<HTMLElement>('branch')
 const refreshEl = $<HTMLButtonElement>('refresh')
 const switchRepoEl = $<HTMLButtonElement>('switch-repo')
 const sshHostEl = $<HTMLButtonElement>('ssh-host')
+const searchEl = $<HTMLButtonElement>('search')
+const findEl = $<HTMLElement>('find')
+const findInputEl = $<HTMLInputElement>('find-input')
+const findCountEl = $<HTMLElement>('find-count')
+const findPreviousEl = $<HTMLButtonElement>('find-previous')
+const findNextEl = $<HTMLButtonElement>('find-next')
+const findCloseEl = $<HTMLButtonElement>('find-close')
 const messageEl = $<HTMLElement>('message')
 const listEl = $<HTMLElement>('list')
 const graphEl = $<SVGSVGElement>('graph')
@@ -57,6 +68,8 @@ let selected: string | null = null
 let seq = 0
 let loading = false
 let loadingMore = false
+let findMatches: string[] = []
+let findIndex = -1
 
 // ---- Pinning: which repo a workspace is, when name + branch match several ---------------------
 // readContext has no workspace id, but terminal ids are unique, so the pin is keyed by them.
@@ -443,6 +456,7 @@ function renderList(): void {
     )
   }
   placeDetails()
+  updateFindMatches(true)
 }
 
 /**
@@ -503,7 +517,7 @@ function renderRow(commit: Commit, indent: number, color: number): HTMLElement {
   row.append(
     el('span', 'subject', commit.subject),
     el('span', 'author', commit.author),
-    el('span', 'date', shortAge(commit.authoredAt)),
+    el('span', 'date', formatCommitDate(commit.authoredAt)),
     el('span', 'hash', commit.shortHash)
   )
   return row
@@ -539,6 +553,7 @@ function renderRefs(refs: Ref[], color: number): HTMLElement[] {
     badgeRefs.set(node, { ref, remotes: remoteNames })
     node.style.color = laneColor(color)
     node.title = [ref.name, ...remoteNames.map((r) => `${r}/${ref.name}`)].join(', ')
+    if (ref.kind === 'head' || ref.kind === 'branch' || ref.kind === 'remote') node.append(icon(ICONS.branch, 'ref-icon'))
     node.append(el('span', 'name', label))
     for (const remote of remoteNames) node.append(el('span', 'remote', remote))
     badges.push(node)
@@ -555,16 +570,6 @@ function renderRefs(refs: Ref[], color: number): HTMLElement[] {
   for (const ref of remotes) if (!absorbed.has(ref)) badge(ref, 'remote-only', ref.name)
   for (const ref of refs) if (ref.kind === 'tag') badge(ref, 'tag', ref.name)
   return badges
-}
-
-function shortAge(at: number): string {
-  const s = Math.max(0, (Date.now() - at) / 1000)
-  if (s < 60) return 'now'
-  if (s < 3600) return `${Math.floor(s / 60)}m`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d`
-  if (s < 86400 * 365) return `${Math.floor(s / (86400 * 30))}mo`
-  return `${Math.floor(s / (86400 * 365))}y`
 }
 
 // ---- Interaction ---------------------------------------------------------------------------
@@ -596,8 +601,6 @@ function reveal(hash: string, jump = false): void {
   if (jump && moving()) replay(row, 'flash')
 }
 
-/** Set while the details open under a new row, so their first content grows from zero. */
-let detailsOpening = false
 /** The commit the details pane shows. A refresh re-creates the rows but keeps this content. */
 let detailsFor: string | null = null
 
@@ -608,25 +611,13 @@ function placeDetails(): void {
   if (row) {
     if (detailsEl.hidden || detailsFor !== selected) {
       detailsFor = selected
-      // Collapsed until its first content arrives, then it grows to fit (morphDetails).
-      detailsOpening = true
       for (const running of detailsEl.getAnimations()) running.cancel()
       detailsEl.replaceChildren()
-      detailsEl.style.height = '0px'
-    } else if (detailsEl.getAnimations().length > 0) {
-      // Reopened while folding: grow back from where it is instead of finishing the fold.
-      const from = detailsEl.offsetHeight
-      for (const running of detailsEl.getAnimations()) running.cancel()
-      tweenHeight(detailsEl, from, detailsEl.offsetHeight)
+      detailsEl.style.height = ''
     }
     detailsEl.style.marginLeft = `${graphWidth}px`
     row.after(detailsEl)
     detailsEl.hidden = false
-  } else if (!detailsEl.hidden && detailsEl.isConnected && moving()) {
-    const closing = tweenHeight(detailsEl, detailsEl.offsetHeight, 0, true, 160)
-    if (closing) closing.onfinish = () => hideDetails()
-    else hideDetails()
-    return
   } else {
     hideDetails()
     return
@@ -636,7 +627,6 @@ function placeDetails(): void {
 
 function hideDetails(): void {
   for (const running of detailsEl.getAnimations()) running.cancel()
-  detailsOpening = false
   detailsFor = null
   detailsEl.style.height = ''
   detailsEl.hidden = true
@@ -644,13 +634,12 @@ function hideDetails(): void {
   drawGraph()
 }
 
-/** Renders new details content and animates the height from what was shown to what is. */
+/** Renders new details content immediately so opening a commit does not shift the panel in motion. */
 function morphDetails(render: () => void): void {
-  const from = detailsOpening ? 0 : detailsEl.offsetHeight
-  detailsOpening = false
+  for (const running of detailsEl.getAnimations()) running.cancel()
   detailsEl.style.height = ''
   render()
-  tweenHeight(detailsEl, from, detailsEl.offsetHeight)
+  drawGraph()
 }
 
 // ---- Commit details ------------------------------------------------------------------------
@@ -731,8 +720,17 @@ function renderWorktree(changes: WorktreeChanges): void {
 }
 
 /** Top-right of the details: the commit's actions (⋯, not for uncommitted changes) and close. */
-function detailsControls(withMenu = true): HTMLElement {
+function detailsControls(withMenu = true, onBack?: () => void): HTMLElement {
   const controls = el('div', 'details-controls')
+  if (onBack) {
+    const back = el('button', 'icon details-back')
+    back.type = 'button'
+    back.title = 'Back to commit details'
+    back.setAttribute('aria-label', back.title)
+    back.append(icon(ICONS.back))
+    back.addEventListener('click', onBack)
+    controls.append(back)
+  }
   const more = el('button', 'icon details-more')
   more.type = 'button'
   more.title = 'Actions (right-click a commit or badge, or Shift+F10)'
@@ -776,8 +774,44 @@ function renderDetails(d: CommitDetails): void {
 
   const grid = el('div', 'details-grid')
   const mergeBase = d.parents.length > 1 && d.comparedTo ? d.comparedTo : undefined
-  grid.append(info, renderFiles(d.files, d.filesTruncated, mergeBase))
+  grid.append(info, renderFiles(d.files, d.filesTruncated, mergeBase, (file) => void openFileDiff(d.hash, file)))
   morphDetails(() => detailsEl.replaceChildren(detailsControls(), grid))
+}
+
+async function openFileDiff(hash: string, file: FileChange): Promise<void> {
+  if (!repo) return
+  const mine = ++detailsSeq
+  renderDetailsMessage('pending', 'Loading diff…')
+  try {
+    const result: FileDiffLoad = await orca.plugin.request('commit.fileDiff', { path: repo.path, hash, filePath: file.path })
+    if (mine !== detailsSeq || selected !== hash) return
+    if (!result.ok) return renderDetailsMessage('error', result.message)
+    renderFileDiff(hash, file, result.diff)
+  } catch (error) {
+    if (mine === detailsSeq) renderDetailsMessage('error', (error as Error).message)
+  }
+}
+
+function renderFileDiff(hash: string, file: FileChange, diff: FileDiff): void {
+  const viewer = el('div', 'details-diff')
+  viewer.append(el('div', 'diff-title mono', file.path))
+  if (diff.kind === 'binary') {
+    viewer.append(el('p', 'pending', 'Binary file: no text diff is available.'))
+  } else {
+    const patch = el('pre', 'diff-patch')
+    for (const line of diff.patch.split('\n')) {
+      const cls = line.startsWith('@@') ? 'hunk' : line.startsWith('+') && !line.startsWith('+++') ? 'added' : line.startsWith('-') && !line.startsWith('---') ? 'deleted' : ''
+      patch.append(el('span', cls, line), '\n')
+    }
+    viewer.append(patch)
+    if (diff.truncated) viewer.append(el('p', 'pending', 'Diff was truncated to keep the panel responsive.'))
+  }
+  const back = () => {
+    const details = detailsCache.get(hash)
+    if (details) renderDetails(details)
+    else void loadDetails(hash)
+  }
+  morphDetails(() => detailsEl.replaceChildren(detailsControls(false, back), viewer))
 }
 
 function person(name: string, email: string): Node[] {
@@ -845,7 +879,7 @@ const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensiti
 const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1)
 
 /** Folders first, then files, each by name; every folder folds on click. */
-function renderFolderContents(folder: Folder): HTMLElement {
+function renderFolderContents(folder: Folder, onOpenFile?: (file: FileChange) => void): HTMLElement {
   const list = el('ul', 'tree')
   for (const child of [...folder.folders.values()].sort((a, b) => byName(a.name, b.name))) {
     const { label, folder: shown } = compact(child)
@@ -854,7 +888,7 @@ function renderFolderContents(folder: Folder): HTMLElement {
     toggle.type = 'button'
     toggle.setAttribute('aria-expanded', 'true')
     toggle.append(chevron(), treeIcon('folder'), el('span', 'name', label))
-    const contents = renderFolderContents(shown)
+    const contents = renderFolderContents(shown, onOpenFile)
     toggle.addEventListener('click', () => {
       const open = toggle.getAttribute('aria-expanded') !== 'true'
       toggle.setAttribute('aria-expanded', String(open))
@@ -875,12 +909,12 @@ function renderFolderContents(folder: Folder): HTMLElement {
     list.append(item)
   }
   for (const file of [...folder.files].sort((a, b) => byName(baseName(a.path), baseName(b.path)))) {
-    list.append(renderFile(file))
+    list.append(renderFile(file, onOpenFile))
   }
   return list
 }
 
-function renderFile(file: FileChange): HTMLElement {
+function renderFile(file: FileChange, onOpenFile?: (file: FileChange) => void): HTMLElement {
   const item = el('li', `tree-row file s-${file.status}${file.untracked ? ' untracked' : ''}`)
   const what = file.untracked ? 'Untracked' : STATUS_NAMES[file.status]
   item.title = `${what}: ${file.from ? `${file.from} → ${file.path}` : file.path}`
@@ -892,6 +926,18 @@ function renderFile(file: FileChange): HTMLElement {
     item.append(stat)
   } else {
     item.append(el('span', 'stat', 'binary'))
+  }
+  if (onOpenFile) {
+    item.tabIndex = 0
+    item.setAttribute('role', 'button')
+    item.setAttribute('aria-label', `Open diff for ${file.path}`)
+    item.addEventListener('click', () => onOpenFile(file))
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        onOpenFile(file)
+      }
+    })
   }
   return item
 }
@@ -909,7 +955,7 @@ function treeIcon(kind: 'folder' | 'file'): SVGSVGElement {
 }
 
 /** `mergeBase` labels a merge's list with the first parent it is compared with. */
-function renderFiles(files: FileChange[], truncated: boolean, mergeBase?: string): HTMLElement {
+function renderFiles(files: FileChange[], truncated: boolean, mergeBase?: string, onOpenFile?: (file: FileChange) => void): HTMLElement {
   const section = el('div', 'details-files')
   const added = files.reduce((sum, f) => sum + (f.added ?? 0), 0)
   const deleted = files.reduce((sum, f) => sum + (f.deleted ?? 0), 0)
@@ -926,7 +972,7 @@ function renderFiles(files: FileChange[], truncated: boolean, mergeBase?: string
     section.append(el('p', 'pending', 'No file changes.'))
     return section
   }
-  section.append(renderFolderContents(buildTree(files)))
+  section.append(renderFolderContents(buildTree(files), onOpenFile))
   if (truncated) section.append(el('p', 'pending', `Only the first ${files.length} files are listed.`))
   return section
 }
@@ -940,10 +986,54 @@ function maybeLoadMore(): void {
   if (listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - ROW_H * 10) void loadMore()
 }
 
+function updateFindMatches(keepCurrent = false): void {
+  const current = keepCurrent ? findMatches[findIndex] : undefined
+  findMatches = findCommitHashes(commits, findInputEl.value)
+  findIndex = current ? findMatches.indexOf(current) : findMatches.length > 0 ? 0 : -1
+  if (findIndex < 0 && findMatches.length > 0) findIndex = 0
+  const matched = new Set(findMatches)
+  for (const row of rowsEl.querySelectorAll<HTMLElement>('.row')) {
+    row.classList.toggle('find-match', matched.has(row.dataset.hash ?? ''))
+    row.classList.toggle('find-current', row.dataset.hash === findMatches[findIndex])
+  }
+  findCountEl.textContent = findInputEl.value.trim() ? (findIndex >= 0 ? `${findIndex + 1} of ${findMatches.length}` : 'No matches') : ''
+}
+
+function moveFind(step: number): void {
+  if (findMatches.length === 0) return
+  findIndex = (findIndex + step + findMatches.length) % findMatches.length
+  updateFindMatches(true)
+  rowOf(findMatches[findIndex])?.scrollIntoView({ block: 'center', behavior: moving() ? 'smooth' : 'auto' })
+}
+
+function openFind(): void {
+  findEl.hidden = false
+  findInputEl.focus()
+  findInputEl.select()
+  updateFindMatches(true)
+}
+
+function closeFind(): void {
+  findEl.hidden = true
+  findInputEl.value = ''
+  updateFindMatches()
+  listEl.focus()
+}
+
 rowsEl.addEventListener('click', (event) => {
+  if ((event.target as Element).closest('.ref')) return
   const row = (event.target as Element).closest<HTMLElement>('.row')
   // Clicking the open commit again folds its details.
   if (row?.dataset.hash) select(row.dataset.hash === selected ? null : row.dataset.hash)
+})
+
+rowsEl.addEventListener('dblclick', (event) => {
+  const badge = (event.target as Element).closest('.ref')
+  const info = badge ? badgeRefs.get(badge) : undefined
+  if (!info || !['head', 'branch', 'remote'].includes(info.ref.kind)) return
+  event.preventDefault()
+  event.stopPropagation()
+  checkoutRef(info.ref)
 })
 
 // Right-click: a badge opens its ref's menu, anywhere else on a row the commit's. It leaves the
@@ -995,6 +1085,16 @@ listEl.addEventListener('keydown', (event) => {
 })
 
 document.addEventListener('keydown', (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+    event.preventDefault()
+    openFind()
+    return
+  }
+  if (event.key === 'Escape' && !findEl.hidden) {
+    event.preventDefault()
+    closeFind()
+    return
+  }
   // A menu or dialog that handled Escape already marked it.
   if (event.key === 'Escape' && selected && !event.defaultPrevented) {
     select(null)
@@ -1009,6 +1109,24 @@ switchRepoEl.addEventListener('click', () => void unpin())
 sshHostEl.append(icon(ICONS.server))
 sshHostEl.addEventListener('click', () => {
   if (repo?.ssh && repo.hostId) void askSshTarget(repo.hostId, repo.ssh)
+})
+searchEl.append(icon(ICONS.search))
+searchEl.addEventListener('click', openFind)
+findPreviousEl.append(icon(ICONS.up))
+findPreviousEl.addEventListener('click', () => moveFind(-1))
+findNextEl.append(icon(ICONS.down))
+findNextEl.addEventListener('click', () => moveFind(1))
+findCloseEl.append(icon(ICONS.close))
+findCloseEl.addEventListener('click', closeFind)
+findInputEl.addEventListener('input', () => {
+  updateFindMatches()
+  if (findMatches.length > 0) moveFind(0)
+})
+findInputEl.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    moveFind(event.shiftKey ? -1 : 1)
+  }
 })
 
 orca.plugin.on('repo.changed', () => void refresh())

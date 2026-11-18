@@ -65,6 +65,11 @@ export type WorktreeLoad = { ok: true; changes: WorktreeChanges } | { ok: false;
 
 export type DetailsLoad = { ok: true; details: CommitDetails } | { ok: false; message: string }
 
+/** A single changed file rendered inside the panel instead of opening a host editor diff. */
+export type FileDiff = { kind: 'text'; patch: string; truncated: boolean } | { kind: 'binary' }
+
+export type FileDiffLoad = { ok: true; diff: FileDiff } | { ok: false; message: string }
+
 /** A multi-step operation git stopped in the middle of, usually on conflicts. */
 export type Operation = 'merge' | 'rebase' | 'cherry-pick' | 'revert'
 

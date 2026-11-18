@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { AUTH_FAILURE, buildArgs, changesWorktree, CONFLICT, isRefName } from './actions.ts'
+import { AUTH_FAILURE, buildArgs, changesWorktree, CONFLICT, isRefName, resolveCheckoutAction } from './actions.ts'
 import type { GitAction } from './types.ts'
 
 const ctx = { remotes: ['origin', 'upstream'] }
@@ -78,6 +78,12 @@ test('which actions touch the worktree', () => {
   assert.ok(changesWorktree({ kind: 'createBranch', name: 'a', at: 'abc1234', checkout: true }))
   assert.ok(!changesWorktree({ kind: 'createTag', name: 'v1', at: 'abc1234' }))
   assert.ok(!changesWorktree({ kind: 'push', force: false }))
+})
+
+test('remote checkout uses an existing local branch instead of recreating it', () => {
+  const remote: GitAction = { kind: 'checkoutRemote', remoteBranch: 'origin/feature/ui', local: 'feature/ui' }
+  assert.deepEqual(resolveCheckoutAction(remote, true), { kind: 'checkout', branch: 'feature/ui' })
+  assert.deepEqual(resolveCheckoutAction(remote, false), remote)
 })
 
 test('git failure messages are classified', () => {

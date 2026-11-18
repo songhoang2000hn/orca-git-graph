@@ -7,16 +7,18 @@ import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { OrcaWorkerApi } from 'orca/worker'
-import { AUTH_FAILURE, buildArgs, CONFLICT, isRemoteAction } from './actions'
+import { AUTH_FAILURE, buildArgs, CONFLICT, isRemoteAction, resolveCheckoutAction } from './actions'
 import {
   currentBranch,
   git,
   gitDirs,
   gitVersion,
+  hasLocalBranch,
   hostWorktrees,
   isSshTarget,
   type Loc,
   markersIn,
+  readCommitFileDiff,
   readCommitDetails,
   readCommits,
   readStatus,
@@ -26,7 +28,7 @@ import {
   SshError
 } from './git'
 import { readOrcaState } from './orca-state'
-import type { ActionResult, Candidate, DetailsLoad, GraphLoad, StatusLoad, WorktreeLoad } from './types'
+import type { ActionResult, Candidate, DetailsLoad, FileDiffLoad, GraphLoad, StatusLoad, WorktreeLoad } from './types'
 
 const DEFAULT_LIMIT = 200
 // About 250 bytes of JSON per commit keeps a full page well under the 1 MiB answer cap.
@@ -38,6 +40,7 @@ const WORKTREE_DEBOUNCE_MS = 500
 const WORKTREE_MAX_WAIT_MS = 3000
 // About 100 bytes of JSON per file; a huge commit lists the first ones and says it was cut.
 const MAX_FILES = 2000
+const MAX_DIFF_CHARS = 512 * 1024
 const HASH = /^[0-9a-f]{4,64}$/i
 // Paths under the git dir whose change means the graph may have changed.
 // Stopped merges, rebases and cherry-picks leave marker files there too.
@@ -437,7 +440,12 @@ export default function activate(orca: OrcaWorkerApi): void {
     if (running.has(path)) return { ok: false, reason: 'invalid', message: 'Another git action is still running.' }
     running.add(path)
     try {
-      const built = buildArgs(action, { remotes: await remoteNames(loc) })
+      const remotes = await remoteNames(loc)
+      const initial = buildArgs(action, { remotes })
+      if (!initial.ok) return { ok: false, reason: 'invalid', message: initial.message }
+      const effective =
+        action.kind === 'checkoutRemote' ? resolveCheckoutAction(action, await hasLocalBranch(loc, action.local, signal)) : action
+      const built = effective === action ? initial : buildArgs(effective, { remotes })
       if (!built.ok) return { ok: false, reason: 'invalid', message: built.message }
       const remote = isRemoteAction(action)
       orca.log(`git ${built.args.join(' ')}`)
@@ -496,6 +504,21 @@ export default function activate(orca: OrcaWorkerApi): void {
     if (!HASH.test(hash)) return { ok: false, message: `Not a commit hash: ${hash}` }
     try {
       return { ok: true, details: await readCommitDetails(loc, hash, MAX_FILES, signal) }
+    } catch (error) {
+      return { ok: false, message: (error as Error).message }
+    }
+  })
+
+  orca.panels.handle('commit.fileDiff', async ({ path, hash, filePath }, { signal }): Promise<FileDiffLoad> => {
+    const loc = served.get(path)
+    touch()
+    if (!loc) return { ok: false, message: 'Unknown repository; reload the graph.' }
+    if (!HASH.test(hash)) return { ok: false, message: `Not a commit hash: ${hash}` }
+    try {
+      // A panel may request only a path it received in this commit's details, never an arbitrary file.
+      const details = await readCommitDetails(loc, hash, MAX_FILES, signal)
+      if (!details.files.some((file) => file.path === filePath)) return { ok: false, message: 'That file is not in this commit.' }
+      return { ok: true, diff: await readCommitFileDiff(loc, hash, filePath, MAX_DIFF_CHARS, signal) }
     } catch (error) {
       return { ok: false, message: (error as Error).message }
     }

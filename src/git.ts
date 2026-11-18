@@ -4,7 +4,7 @@
 import { execFile } from 'node:child_process'
 import { access, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Commit, CommitDetails, FileChange, FileStatus, Operation, Ref, RepoStatus, WorktreeChanges } from './types'
+import type { Commit, CommitDetails, FileChange, FileDiff, FileStatus, Operation, Ref, RepoStatus, WorktreeChanges } from './types'
 
 const FIELD = '\x1f'
 const RECORD = '\x1e'
@@ -282,6 +282,12 @@ export async function remoteNames(at: string | Loc): Promise<string[]> {
   return (await git(at, ['remote'])).split(/\r?\n/).filter(Boolean)
 }
 
+/** Whether `name` is already a local branch (remote-tracking refs do not count). */
+export async function hasLocalBranch(at: string | Loc, name: string, signal?: AbortSignal): Promise<boolean> {
+  const result = await runGit(at, ['show-ref', '--verify', '--quiet', `refs/heads/${name}`], { timeoutMs: 10_000, signal })
+  return result.code === 0
+}
+
 /** Splits a `%D` decoration list into typed refs. */
 export function parseRefs(decorations: string, remotes: readonly string[]): Ref[] {
   if (!decorations) return []
@@ -398,6 +404,21 @@ export async function readCommitDetails(
     files: files.slice(0, maxFiles),
     filesTruncated: files.length > maxFiles
   }
+}
+
+/** Reads one file's patch against a commit's first parent (or the empty tree for a root commit). */
+export async function readCommitFileDiff(
+  cwd: string | Loc,
+  hash: string,
+  path: string,
+  maxChars: number,
+  signal?: AbortSignal
+): Promise<FileDiff> {
+  const parents = (await git(cwd, ['show', '-s', '--format=%P', hash], signal)).trim().split(' ').filter(Boolean)
+  const range = parents[0] ? [parents[0], hash] : ['--root', hash]
+  const patch = await git(cwd, ['diff-tree', '-r', '--no-commit-id', '-M', '-p', ...range, '--', path], signal)
+  if (/(^|\n)(Binary files |GIT binary patch)/.test(patch)) return { kind: 'binary' }
+  return { kind: 'text', patch: patch.slice(0, maxChars), truncated: patch.length > maxChars }
 }
 
 // Untracked files have no numstat; count their lines here, up to this size.

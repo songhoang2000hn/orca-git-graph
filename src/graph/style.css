@@ -53,6 +53,32 @@ body {
   flex: none;
 }
 
+.find {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.find input {
+  min-width: 0;
+  flex: 1;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.find span {
+  min-width: 44px;
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
 .repo {
   font-weight: 600;
   font-size: 13px;
@@ -169,6 +195,45 @@ button {
   flex: 1;
   overflow: auto;
   outline: none;
+  scrollbar-gutter: stable;
+}
+
+/* Chromium (Orca's frame) and Firefox both get a compact theme-aware scrollbar. */
+.list,
+.details,
+.diff-patch {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-line) transparent;
+}
+
+.list::-webkit-scrollbar,
+.details::-webkit-scrollbar,
+.diff-patch::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.list::-webkit-scrollbar-track,
+.details::-webkit-scrollbar-track,
+.diff-patch::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.list::-webkit-scrollbar-thumb,
+.details::-webkit-scrollbar-thumb,
+.diff-patch::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-line);
+  background-clip: padding-box;
+}
+
+.list::-webkit-scrollbar-thumb:hover,
+.details::-webkit-scrollbar-thumb:hover,
+.diff-patch::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  background-clip: padding-box;
 }
 
 .graph {
@@ -229,6 +294,9 @@ button {
   background: var(--selected);
 }
 
+.row.find-match { background: color-mix(in srgb, var(--lane-1) 12%, transparent); }
+.row.find-current { outline: 1px solid var(--lane-1); outline-offset: -1px; }
+
 .subject {
   flex: 1;
   min-width: 0;
@@ -245,6 +313,12 @@ button {
 .hash {
   flex: none;
   color: var(--muted);
+}
+
+.date {
+  max-width: 142px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hash {
@@ -290,6 +364,17 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--fg);
+}
+
+.ref .ref-icon {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .ref.head .name {
@@ -379,6 +464,33 @@ button {
 .details > .error {
   margin: 0;
 }
+
+.details-diff {
+  min-width: 0;
+}
+
+.diff-title {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.diff-patch {
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--surface-line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  white-space: pre;
+}
+
+.diff-patch span {
+  display: block;
+}
+
+.diff-patch .added { color: var(--lane-2); }
+.diff-patch .deleted { color: var(--orca-destructive, #ef4444); }
+.diff-patch .hunk { color: var(--orca-primary, #3b82f6); }
 
 .mono {
   font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
