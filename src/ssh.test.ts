@@ -116,3 +116,39 @@ test('an unreachable SSH host is an SshError, not a git failure', { skip: proces
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('Orca state gives ssh aliases for ssh and managed-server hosts, and each host’s focused folder', async () => {
+  const { addEnvironments, parseActiveRemote, parseSshTargets } = await import('./orca-state.ts')
+  const aliases = parseSshTargets(
+    JSON.stringify([
+      { id: 't1', label: 'Mac Studio', configHost: 'studio', host: '10.0.0.5', port: 22, username: 'me' },
+      { id: 't2', label: 'Box', host: 'box.lan', port: 22, username: 'pt' }
+    ])
+  )
+  assert.equal(aliases.get('ssh:t1'), 'studio')
+  assert.equal(aliases.get('ssh:t2'), 'pt@box.lan')
+  addEnvironments(JSON.stringify({ entries: { env9: { orcadDeployment: { sshTargetId: 't1' } } } }), aliases)
+  assert.equal(aliases.get('runtime:env9'), 'studio')
+  const active = parseActiveRemote(
+    JSON.stringify({
+      local: { activeWorktreeId: 'r0::/Users/me/x' },
+      'runtime:env9': { activeWorktreeId: 'r1::/Users/me/projects/scms' }
+    }),
+    aliases
+  )
+  assert.deepEqual(active, [{ hostId: 'runtime:env9', alias: 'studio', path: '/Users/me/projects/scms' }])
+  assert.equal(parseSshTargets('not json').size, 0)
+})
+
+test('the Orca CLI list of a host parses to name, short branch and folder', async () => {
+  const { parseHostWorktrees } = await import('./git.ts')
+  const out = JSON.stringify({
+    ok: true,
+    result: { worktrees: [{ displayName: 'fix/a', branch: 'refs/heads/fix/a', path: '/srv/repo' }, { displayName: 'x', branch: '', path: '/srv/x' }] }
+  })
+  assert.deepEqual(parseHostWorktrees(out), [
+    { displayName: 'fix/a', branch: 'fix/a', path: '/srv/repo' },
+    { displayName: 'x', branch: null, path: '/srv/x' }
+  ])
+  assert.throws(() => parseHostWorktrees('{"ok":false}'))
+})

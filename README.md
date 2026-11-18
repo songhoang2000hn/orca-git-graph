@@ -61,6 +61,11 @@ filled in for you. The answer is kept per host; the server button in the header 
   the uncommitted changes moved, and stops asking after 10 minutes without a panel request.
 - Untracked files on a host are listed without line counts.
 - The host needs `git` and a POSIX login shell (sh, bash, zsh).
+- Orca does not list some remote workspaces to plugins at all (hosts that run Orca's managed
+  server). For those, Finline takes the ssh alias Orca saved for the host (read-only, from Orca's
+  own state, when there is a single remote host) or the one you give, then finds the workspace's
+  folder from the workspace that host has focused, or by asking the Orca CLI on the host
+  (`~/.orca/cli/bin/orca worktree list`).
 
 ## Access it asks for
 

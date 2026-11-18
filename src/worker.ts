@@ -13,6 +13,7 @@ import {
   git,
   gitDirs,
   gitVersion,
+  hostWorktrees,
   isSshTarget,
   type Loc,
   markersIn,
@@ -24,6 +25,7 @@ import {
   runGit,
   SshError
 } from './git'
+import { readOrcaState } from './orca-state'
 import type { ActionResult, Candidate, DetailsLoad, GraphLoad, StatusLoad, WorktreeLoad } from './types'
 
 const DEFAULT_LIMIT = 200
@@ -49,6 +51,9 @@ const LOCAL_TIMEOUT_MS = 60_000
 const POLL_MS = 4000
 const POLL_FAILING_MS = 30_000
 const POLL_IDLE_MS = 10 * 60_000
+// Key of the ssh destination for workspaces Orca does not list to plugins at all (some SSH
+// setups, such as hosts running Orca's managed server): their host has no id on this side.
+const UNLISTED = 'unlisted'
 
 type Resolved =
   | { ok: true; loc: Loc; hostId: string | null; resolvedBy: string }
@@ -94,7 +99,7 @@ function locate(
   resolvedBy: string
 ): Resolved {
   if (isLocal(w.hostId)) return { ok: true, loc: { path: w.path, ssh: null }, hostId: w.hostId, resolvedBy }
-  if (!isSsh(w.hostId)) {
+  if (!isSsh(w.hostId) && !w.hostId?.startsWith('runtime:')) {
     return { ok: false, reason: 'remote', message: `"${w.name}" runs on ${w.hostId}, which Finline cannot reach yet.` }
   }
   const hostId = w.hostId as string
@@ -126,6 +131,9 @@ async function resolveRepo(
 
   const context = await orca.host.call('workspace.readContext', {})
   if (!context) return { ok: false, reason: 'no-workspace', message: 'No workspace is focused.' }
+  // Aliases Orca itself saved fill in for hosts the person has not set; theirs win.
+  const state = await readOrcaState()
+  sshTargets = { ...Object.fromEntries(state.aliases), ...sshTargets }
   const { workspaces } = (await orca.host.call('workspace.list', {})) as { workspaces: WorkspaceRow[] }
 
   // Newer Orca names the focused workspace's id; then there is nothing to guess.
@@ -138,7 +146,9 @@ async function resolveRepo(
     (w) => w.name === context.displayName && (w.branch ?? null) === (context.branch || null)
   )
   if (matches.length === 0) {
-    return { ok: false, reason: 'not-found', message: `No workspace "${context.displayName}" on ${context.branch}.` }
+    const hosts = [...new Set(workspaces.map((w) => w.hostId ?? 'null'))].join(', ') || 'none'
+    orca.log(`"${context.displayName}" (${context.branch}, id ${id ?? 'none'}) is not among ${workspaces.length} listed workspaces (hosts: ${hosts})`)
+    return findUnlisted(context.displayName, context.branch || null, id, sshTargets, state.activeRemote)
   }
   if (matches.length === 1) return locate(matches[0], sshTargets, 'name+branch')
 
@@ -157,6 +167,72 @@ async function resolveRepo(
     message: `${matches.length} workspaces are named "${context.displayName}" on ${context.branch}.`,
     candidates
   }
+}
+
+// Folders found on a host for unlisted workspaces, by destination, name and branch.
+const unlistedPaths = new Map<string, string>()
+
+/**
+ * A focused workspace that `workspace.list` leaves out: Orca does this for workspaces on some
+ * SSH hosts. Its folder comes from the workspace id when that carries it (`<repo>::<path>`),
+ * else from the Orca CLI on the host, reached with the ssh destination the person gave.
+ */
+async function findUnlisted(
+  name: string,
+  branch: string | null,
+  id: string | undefined,
+  sshTargets: Record<string, string>,
+  activeRemote: Array<{ hostId: string; alias: string | null; path: string }>
+): Promise<Resolved> {
+  // Without the person's choice, a single remote host Orca has focused names the destination.
+  const focusedAliases = [...new Set(activeRemote.map((a) => sshTargets[a.hostId] ?? a.alias).filter((a): a is string => Boolean(a)))]
+  const target = sshTargets[UNLISTED] ?? (focusedAliases.length === 1 ? focusedAliases[0] : undefined)
+  if (!target || !isSshTarget(target)) {
+    return {
+      ok: false,
+      reason: 'ssh-target',
+      hostId: UNLISTED,
+      message: `Orca does not list "${name}" to plugins, so it is probably on an SSH host. Tell Finline how to reach that host with ssh, as you would in a terminal.`
+    }
+  }
+  const fromId = id ? /^[^/]*::(\/.+)$/.exec(id)?.[1] : undefined
+  if (fromId) return { ok: true, loc: { path: fromId, ssh: target }, hostId: UNLISTED, resolvedBy: `workspace id via ssh ${target}` }
+
+  const key = `${target}\n${name}\n${branch ?? ''}`
+  let path = unlistedPaths.get(key)
+  // The workspace that host has focused, when it is on the same branch, is this one.
+  if (!path) {
+    for (const active of activeRemote) {
+      if ((sshTargets[active.hostId] ?? active.alias) !== target) continue
+      const onBranch = await currentBranch({ path: active.path, ssh: target }).catch(() => undefined)
+      if (onBranch !== undefined && onBranch === branch) {
+        path = active.path
+        break
+      }
+    }
+  }
+  if (!path) {
+    try {
+      const found = (await hostWorktrees(target)).filter((w) => w.displayName === name && w.branch === branch)
+      if (found.length !== 1) {
+        return {
+          ok: false,
+          reason: 'ssh-failed',
+          hostId: UNLISTED,
+          target,
+          message:
+            found.length === 0
+              ? `Orca on ${target} has no workspace "${name}" on ${branch ?? 'no branch'}. Is it on another host?`
+              : `Orca on ${target} has ${found.length} workspaces "${name}" on ${branch}; Finline cannot tell them apart yet.`
+        }
+      }
+      path = found[0].path
+      unlistedPaths.set(key, path)
+    } catch (error) {
+      return { ok: false, reason: 'ssh-failed', hostId: UNLISTED, target, message: (error as Error).message }
+    }
+  }
+  return { ok: true, loc: { path, ssh: target }, hostId: UNLISTED, resolvedBy: `orca worktree list via ssh ${target}` }
 }
 
 let watcher: FSWatcher | null = null

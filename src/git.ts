@@ -146,6 +146,48 @@ export function runGit(
   })
 }
 
+/** One worktree as the Orca CLI on a host lists it (`orca worktree list --json`). */
+export interface HostWorktree {
+  displayName: string
+  branch: string | null
+  path: string
+}
+
+/**
+ * Asks the Orca CLI on an SSH host which worktrees it has: Orca installs it at
+ * `~/.orca/cli/bin/orca` on every host it manages. Used when Orca does not list a remote
+ * workspace to plugins, so its folder is unknown on this side.
+ */
+export function hostWorktrees(target: string): Promise<HostWorktree[]> {
+  const loc: Loc = { path: '.', ssh: target }
+  const script = 'o="$HOME/.orca/cli/bin/orca"; [ -x "$o" ] || o=orca; exec "$o" worktree list --json'
+  return new Promise((resolve, reject) => {
+    exec(loc, ['sh', '-c', script], { maxBuffer: 16 * 1024 * 1024, timeout: 20_000 }, (error, stdout, stderr) => {
+      if (error) {
+        reject(sshFailed(loc, error.code) ? new SshError(sshMessage(loc, stderr)) : new Error((stderr || error.message).trim()))
+        return
+      }
+      try {
+        resolve(parseHostWorktrees(stdout))
+      } catch (parseError) {
+        reject(new Error(`The Orca CLI on ${target} answered something else: ${(parseError as Error).message}`))
+      }
+    })
+  })
+}
+
+export function parseHostWorktrees(out: string): HostWorktree[] {
+  const answer = JSON.parse(out) as { result?: { worktrees?: unknown[] } }
+  const rows = answer.result?.worktrees
+  if (!Array.isArray(rows)) throw new Error('no worktree list')
+  return rows.flatMap((row): HostWorktree[] => {
+    const w = row as { displayName?: unknown; branch?: unknown; path?: unknown }
+    if (typeof w.path !== 'string' || typeof w.displayName !== 'string') return []
+    const branch = typeof w.branch === 'string' ? w.branch.replace(/^refs\/heads\//, '') || null : null
+    return [{ displayName: w.displayName, branch, path: w.path }]
+  })
+}
+
 /** Names in a directory on the SSH host (`ls -A`), or an empty list when it can't be read. */
 function remoteEntries(loc: Loc, dir: string): Promise<Set<string>> {
   return new Promise((resolve) => {
