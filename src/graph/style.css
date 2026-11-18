@@ -244,6 +244,35 @@ button {
   overflow: visible;
 }
 
+.commit-header,
+.row {
+  display: grid;
+  grid-template-columns: var(--graph-col, 40px) minmax(var(--description-col, 240px), 1fr) var(--date-col, 180px) var(--author-col, 160px) var(--commit-col, 100px);
+  min-width: max-content;
+}
+
+.commit-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.commit-column {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  border-right: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.commit-column:first-child { justify-content: flex-start; padding-left: 10px; }
+.column-resize { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 3; }
+
 .graph path {
   fill: none;
   stroke-width: 2;
@@ -259,14 +288,15 @@ button {
 }
 
 .row {
-  display: flex;
   align-items: center;
-  gap: 6px;
   height: var(--row-h);
-  padding-right: 8px;
   cursor: default;
   white-space: nowrap;
 }
+
+.graph-space { min-width: 0; }
+.description { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; padding-right: 8px; }
+.row > .date, .row > .author, .row > .hash { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
 
 .row:hover {
   background: var(--hover);
@@ -308,41 +338,13 @@ button {
   font-weight: 600;
 }
 
-.date,
-.author,
-.hash {
-  flex: none;
+.date, .author, .hash {
   color: var(--muted);
-}
-
-.date {
-  max-width: 142px;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .hash {
   font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
   font-size: 11px;
-}
-
-.author {
-  max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* The right sidebar is narrow: secondary columns appear only with room. */
-@media (max-width: 479px) {
-  .author {
-    display: none;
-  }
-}
-
-@media (max-width: 359px) {
-  .hash {
-    display: none;
-  }
 }
 
 .ref {

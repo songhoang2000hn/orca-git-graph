@@ -3,6 +3,7 @@
 // posts `repo.changed` or Orca reports `workspace.changed`. Git actions live in actions.ts.
 import { edgePath, layoutGraph, type Layout } from '../layout.ts'
 import { formatCommitDate } from '../format.ts'
+import { clampColumnWidth, type ColumnName } from '../columns.ts'
 import { findCommitHashes } from '../search.ts'
 import type {
   Candidate,
@@ -52,6 +53,7 @@ const findNextEl = $<HTMLButtonElement>('find-next')
 const findCloseEl = $<HTMLButtonElement>('find-close')
 const messageEl = $<HTMLElement>('message')
 const listEl = $<HTMLElement>('list')
+const commitHeaderEl = $<HTMLElement>('commit-header')
 const graphEl = $<SVGSVGElement>('graph')
 const rowsEl = $<HTMLElement>('rows')
 const moreEl = $<HTMLElement>('more')
@@ -70,6 +72,25 @@ let loading = false
 let loadingMore = false
 let findMatches: string[] = []
 let findIndex = -1
+const COLUMN_KEY = 'finline-git-graph.columns'
+const columnWidths: Partial<Record<ColumnName, number>> = (() => {
+  try { return JSON.parse(localStorage.getItem(COLUMN_KEY) ?? '{}') ?? {} } catch { return {} }
+})()
+
+function graphColumnWidth(): number { return Math.max(graphWidth, columnWidths.graph ?? graphWidth) }
+function applyColumns(): void {
+  const values: Record<ColumnName, number> = {
+    graph: graphColumnWidth(), description: columnWidths.description ?? 240, date: columnWidths.date ?? 180,
+    author: columnWidths.author ?? 160, commit: columnWidths.commit ?? 100
+  }
+  for (const [name, width] of Object.entries(values)) listEl.style.setProperty(`--${name}-col`, `${width}px`)
+}
+function saveColumn(column: ColumnName, width: number): void {
+  columnWidths[column] = clampColumnWidth(column, width, graphWidth)
+  try { localStorage.setItem(COLUMN_KEY, JSON.stringify(columnWidths)) } catch {}
+  applyColumns()
+  drawGraph()
+}
 
 // ---- Pinning: which repo a workspace is, when name + branch match several ---------------------
 // readContext has no workspace id, but terminal ids are unique, so the pin is keyed by them.
@@ -446,6 +467,7 @@ function renderList(): void {
   rows = wip ? [wip, ...commits] : commits
   layout = layoutGraph(rows)
   graphWidth = PAD_X * 2 + Math.max(1, layout.width) * COL_W
+  applyColumns()
   if (rows.length === 0) {
     rowsEl.replaceChildren(repo ? el('div', 'empty', 'No commits yet') : '')
   } else {
@@ -469,10 +491,11 @@ function drawGraph(): void {
   const open = anchor ? rows.findIndex((c) => c.hash === anchor) : -1
   const extra = open >= 0 ? detailsEl.offsetHeight : 0
   const x = (col: number) => PAD_X + col * COL_W + COL_W / 2
-  const y = (row: number) => row * ROW_H + ROW_H / 2 + (open >= 0 && row > open ? extra : 0)
+  const headerHeight = commitHeaderEl.offsetHeight
+  const y = (row: number) => headerHeight + row * ROW_H + ROW_H / 2 + (open >= 0 && row > open ? extra : 0)
 
   graphEl.setAttribute('width', String(graphWidth))
-  graphEl.setAttribute('height', String(rows.length * ROW_H + extra + (hasMore ? ROW_H : 0)))
+  graphEl.setAttribute('height', String(headerHeight + rows.length * ROW_H + extra + (hasMore ? ROW_H : 0)))
   const wip = rows[0]?.hash === WORKTREE
   const paths = layout.edges.map((edge) => {
     const path = svg('path', { d: edgePath(edge, x, y, ROW_H), stroke: laneColor(edge.color) })
@@ -508,16 +531,16 @@ function setHotRow(row: number): void {
 function renderRow(commit: Commit, indent: number, color: number): HTMLElement {
   const isHead = commit.refs.some((r) => r.kind === 'head' || r.kind === 'detached')
   const row = el('div', isHead ? 'row head' : 'row')
-  row.style.paddingLeft = `${indent}px`
   row.dataset.hash = commit.hash
   row.setAttribute('role', 'option')
   row.setAttribute('aria-selected', String(commit.hash === selected))
   row.title = `${commit.shortHash} · ${commit.author} · ${new Date(commit.authoredAt).toLocaleString()}\n${commit.subject}`
-  row.append(...renderRefs(commit.refs, color))
+  const description = el('div', 'description')
+  description.append(...renderRefs(commit.refs, color), el('span', 'subject', commit.subject))
   row.append(
-    el('span', 'subject', commit.subject),
-    el('span', 'author', commit.author),
+    el('span', 'graph-space'), description,
     el('span', 'date', formatCommitDate(commit.authoredAt)),
+    el('span', 'author', commit.author),
     el('span', 'hash', commit.shortHash)
   )
   return row
@@ -526,7 +549,6 @@ function renderRow(commit: Commit, indent: number, color: number): HTMLElement {
 /** The uncommitted-changes row: no author, date or hash, just what changed. */
 function renderWipRow(commit: Commit, indent: number): HTMLElement {
   const row = el('div', 'row wip')
-  row.style.paddingLeft = `${indent}px`
   row.dataset.hash = commit.hash
   row.setAttribute('role', 'option')
   row.setAttribute('aria-selected', String(commit.hash === selected))
@@ -536,7 +558,7 @@ function renderWipRow(commit: Commit, indent: number): HTMLElement {
   if (status?.untracked) parts.push(`${status.untracked} untracked`)
   if (status?.conflicts) parts.push(`${status.conflicts} conflicted`)
   row.title = `${commit.subject}\n${parts.join(', ')}`
-  row.append(el('span', 'subject', commit.subject), el('span', 'author', parts.join(' · ')))
+  row.append(el('span', 'graph-space'), el('span', 'subject', commit.subject), el('span', 'date'), el('span', 'author', parts.join(' · ')), el('span', 'hash'))
   return row
 }
 
@@ -615,7 +637,7 @@ function placeDetails(): void {
       detailsEl.replaceChildren()
       detailsEl.style.height = ''
     }
-    detailsEl.style.marginLeft = `${graphWidth}px`
+    detailsEl.style.marginLeft = `${graphColumnWidth()}px`
     row.after(detailsEl)
     detailsEl.hidden = false
   } else {
@@ -1110,6 +1132,19 @@ sshHostEl.append(icon(ICONS.server))
 sshHostEl.addEventListener('click', () => {
   if (repo?.ssh && repo.hostId) void askSshTarget(repo.hostId, repo.ssh)
 })
+for (const handle of commitHeaderEl.querySelectorAll<HTMLElement>('.column-resize')) {
+  handle.addEventListener('pointerdown', (event) => {
+    const cell = handle.parentElement as HTMLElement
+    const column = cell.dataset.column as ColumnName
+    const startX = event.clientX
+    const startWidth = cell.getBoundingClientRect().width
+    handle.setPointerCapture(event.pointerId)
+    const move = (next: PointerEvent) => saveColumn(column, startWidth + next.clientX - startX)
+    const up = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up) }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', up)
+  })
+}
 searchEl.append(icon(ICONS.search))
 searchEl.addEventListener('click', openFind)
 findPreviousEl.append(icon(ICONS.up))
