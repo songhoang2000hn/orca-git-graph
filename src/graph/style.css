@@ -379,6 +379,13 @@ button {
   stroke-linejoin: round;
 }
 
+.ref.head .current-ref-icon {
+  padding: 1px;
+  border-radius: 2px;
+  background: var(--orca-primary, #3b82f6);
+  color: var(--orca-primary-foreground, #fff);
+}
+
 .ref.head .name {
   font-weight: 700;
 }
@@ -603,6 +610,7 @@ button {
 button.tree-row {
   cursor: pointer;
 }
+
 
 .tree-row {
   border-radius: 4px;
