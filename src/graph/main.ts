@@ -2,6 +2,7 @@
 // commit list. It talks to the worker with orca.plugin.request and refreshes when the worker
 // posts `repo.changed` or Orca reports `workspace.changed`. Git actions live in actions.ts.
 import { edgePath, layoutGraph, type Layout } from '../layout.ts'
+import { formatCommitDate } from '../format.ts'
 import type {
   Candidate,
   Commit,
@@ -503,7 +504,7 @@ function renderRow(commit: Commit, indent: number, color: number): HTMLElement {
   row.append(
     el('span', 'subject', commit.subject),
     el('span', 'author', commit.author),
-    el('span', 'date', shortAge(commit.authoredAt)),
+    el('span', 'date', formatCommitDate(commit.authoredAt)),
     el('span', 'hash', commit.shortHash)
   )
   return row
@@ -558,16 +559,6 @@ function renderRefs(refs: Ref[], color: number): HTMLElement[] {
   return badges
 }
 
-function shortAge(at: number): string {
-  const s = Math.max(0, (Date.now() - at) / 1000)
-  if (s < 60) return 'now'
-  if (s < 3600) return `${Math.floor(s / 60)}m`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d`
-  if (s < 86400 * 365) return `${Math.floor(s / (86400 * 30))}mo`
-  return `${Math.floor(s / (86400 * 365))}y`
-}
-
 // ---- Interaction ---------------------------------------------------------------------------
 
 const rowOf = (hash: string) => rowsEl.querySelector<HTMLElement>(`.row[data-hash="${hash}"]`)
@@ -597,8 +588,6 @@ function reveal(hash: string, jump = false): void {
   if (jump && moving()) replay(row, 'flash')
 }
 
-/** Set while the details open under a new row, so their first content grows from zero. */
-let detailsOpening = false
 /** The commit the details pane shows. A refresh re-creates the rows but keeps this content. */
 let detailsFor: string | null = null
 
@@ -609,25 +598,13 @@ function placeDetails(): void {
   if (row) {
     if (detailsEl.hidden || detailsFor !== selected) {
       detailsFor = selected
-      // Collapsed until its first content arrives, then it grows to fit (morphDetails).
-      detailsOpening = true
       for (const running of detailsEl.getAnimations()) running.cancel()
       detailsEl.replaceChildren()
-      detailsEl.style.height = '0px'
-    } else if (detailsEl.getAnimations().length > 0) {
-      // Reopened while folding: grow back from where it is instead of finishing the fold.
-      const from = detailsEl.offsetHeight
-      for (const running of detailsEl.getAnimations()) running.cancel()
-      tweenHeight(detailsEl, from, detailsEl.offsetHeight)
+      detailsEl.style.height = ''
     }
     detailsEl.style.marginLeft = `${graphWidth}px`
     row.after(detailsEl)
     detailsEl.hidden = false
-  } else if (!detailsEl.hidden && detailsEl.isConnected && moving()) {
-    const closing = tweenHeight(detailsEl, detailsEl.offsetHeight, 0, true, 160)
-    if (closing) closing.onfinish = () => hideDetails()
-    else hideDetails()
-    return
   } else {
     hideDetails()
     return
@@ -637,7 +614,6 @@ function placeDetails(): void {
 
 function hideDetails(): void {
   for (const running of detailsEl.getAnimations()) running.cancel()
-  detailsOpening = false
   detailsFor = null
   detailsEl.style.height = ''
   detailsEl.hidden = true
@@ -645,13 +621,12 @@ function hideDetails(): void {
   drawGraph()
 }
 
-/** Renders new details content and animates the height from what was shown to what is. */
+/** Renders new details content immediately so opening a commit does not shift the panel in motion. */
 function morphDetails(render: () => void): void {
-  const from = detailsOpening ? 0 : detailsEl.offsetHeight
-  detailsOpening = false
+  for (const running of detailsEl.getAnimations()) running.cancel()
   detailsEl.style.height = ''
   render()
-  tweenHeight(detailsEl, from, detailsEl.offsetHeight)
+  drawGraph()
 }
 
 // ---- Commit details ------------------------------------------------------------------------

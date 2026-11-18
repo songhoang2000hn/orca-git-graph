@@ -247,6 +247,12 @@ button {
   color: var(--muted);
 }
 
+.date {
+  max-width: 142px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .hash {
   font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
   font-size: 11px;
