@@ -29,6 +29,13 @@
     <section class="banner" id="banner" role="status" hidden></section>
     <section class="message" id="message" hidden></section>
     <main class="list" id="list" tabindex="0" aria-label="Commits">
+      <div class="commit-header" id="commit-header" role="row">
+        <div class="commit-column" data-column="graph">Graph<span class="column-resize" aria-hidden="true"></span></div>
+        <div class="commit-column" data-column="description">Description<span class="column-resize" aria-hidden="true"></span></div>
+        <div class="commit-column" data-column="date">Date<span class="column-resize" aria-hidden="true"></span></div>
+        <div class="commit-column" data-column="author">Author<span class="column-resize" aria-hidden="true"></span></div>
+        <div class="commit-column" data-column="commit">Commit<span class="column-resize" aria-hidden="true"></span></div>
+      </div>
       <svg class="graph" id="graph" aria-hidden="true"></svg>
       <div class="rows" id="rows" role="listbox" aria-label="Commits"></div>
       <div class="more" id="more" hidden>Loading more…</div>
