@@ -169,6 +169,45 @@ button {
   flex: 1;
   overflow: auto;
   outline: none;
+  scrollbar-gutter: stable;
+}
+
+/* Chromium (Orca's frame) and Firefox both get a compact theme-aware scrollbar. */
+.list,
+.details,
+.diff-patch {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-line) transparent;
+}
+
+.list::-webkit-scrollbar,
+.details::-webkit-scrollbar,
+.diff-patch::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.list::-webkit-scrollbar-track,
+.details::-webkit-scrollbar-track,
+.diff-patch::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.list::-webkit-scrollbar-thumb,
+.details::-webkit-scrollbar-thumb,
+.diff-patch::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-line);
+  background-clip: padding-box;
+}
+
+.list::-webkit-scrollbar-thumb:hover,
+.details::-webkit-scrollbar-thumb:hover,
+.diff-patch::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  background-clip: padding-box;
 }
 
 .graph {
