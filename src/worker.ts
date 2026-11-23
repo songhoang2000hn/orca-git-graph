@@ -25,6 +25,7 @@ import {
   readWorktreeChanges,
   remoteNames,
   runGit,
+  selectHostWorktrees,
   SshError
 } from './git'
 import { readOrcaState } from './orca-state'
@@ -216,7 +217,7 @@ async function findUnlisted(
   }
   if (!path) {
     try {
-      const found = (await hostWorktrees(target)).filter((w) => w.displayName === name && w.branch === branch)
+      const found = selectHostWorktrees(await hostWorktrees(target), name, branch)
       if (found.length !== 1) {
         return {
           ok: false,

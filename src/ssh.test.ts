@@ -152,3 +152,13 @@ test('the Orca CLI list of a host parses to name, short branch and folder', asyn
   ])
   assert.throws(() => parseHostWorktrees('{"ok":false}'))
 })
+
+test('a branchless focused workspace finds its unique same-named host worktree', async () => {
+  const git = await import('./git.ts')
+  const worktrees = [
+    { displayName: 'scms-viper', branch: 'develop', path: '/srv/scms-viper' },
+    { displayName: 'another-repo', branch: 'main', path: '/srv/another-repo' }
+  ]
+
+  assert.deepEqual(git.selectHostWorktrees?.(worktrees, 'scms-viper', null), [worktrees[0]])
+})

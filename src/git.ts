@@ -188,6 +188,14 @@ export function parseHostWorktrees(out: string): HostWorktree[] {
   })
 }
 
+/**
+ * Narrows the host's worktree list to the focused workspace. Some remote Orca contexts omit
+ * their branch, so use it as a discriminator only when the host supplied one.
+ */
+export function selectHostWorktrees(worktrees: HostWorktree[], displayName: string, branch: string | null): HostWorktree[] {
+  return worktrees.filter((worktree) => worktree.displayName === displayName && (branch === null || worktree.branch === branch))
+}
+
 /** Names in a directory on the SSH host (`ls -A`), or an empty list when it can't be read. */
 function remoteEntries(loc: Loc, dir: string): Promise<Set<string>> {
   return new Promise((resolve) => {
