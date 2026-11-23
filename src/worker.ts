@@ -28,7 +28,7 @@ import {
   selectHostWorktrees,
   SshError
 } from './git'
-import { readOrcaState } from './orca-state'
+import { focusedBranchMatches, readOrcaState } from './orca-state'
 import type { ActionResult, Candidate, DetailsLoad, FileDiffLoad, GraphLoad, StatusLoad, WorktreeLoad } from './types'
 
 const DEFAULT_LIMIT = 200
@@ -209,7 +209,7 @@ async function findUnlisted(
     for (const active of activeRemote) {
       if ((sshTargets[active.hostId] ?? active.alias) !== target) continue
       const onBranch = await currentBranch({ path: active.path, ssh: target }).catch(() => undefined)
-      if (onBranch !== undefined && onBranch === branch) {
+      if (focusedBranchMatches(branch, onBranch ?? null)) {
         path = active.path
         break
       }

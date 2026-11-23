@@ -118,7 +118,8 @@ test('an unreachable SSH host is an SshError, not a git failure', { skip: proces
 })
 
 test('Orca state gives ssh aliases for ssh and managed-server hosts, and each host’s focused folder', async () => {
-  const { addEnvironments, parseActiveRemote, parseSshTargets } = await import('./orca-state.ts')
+  const state = await import('./orca-state.ts')
+  const { addEnvironments, parseActiveRemote, parseSshTargets } = state
   const aliases = parseSshTargets(
     JSON.stringify([
       { id: 't1', label: 'Mac Studio', configHost: 'studio', host: '10.0.0.5', port: 22, username: 'me' },
@@ -138,6 +139,11 @@ test('Orca state gives ssh aliases for ssh and managed-server hosts, and each ho
   )
   assert.deepEqual(active, [{ hostId: 'runtime:env9', alias: 'studio', path: '/Users/me/projects/scms' }])
   assert.equal(parseSshTargets('not json').size, 0)
+})
+
+test('a branchless context accepts the focused remote worktree branch', async () => {
+  const state = await import('./orca-state.ts')
+  assert.equal(state.focusedBranchMatches?.(null, 'fix/form-sua-don-chon-xe'), true)
 })
 
 test('the Orca CLI list of a host parses to name, short branch and folder', async () => {

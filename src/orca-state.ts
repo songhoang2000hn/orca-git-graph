@@ -72,6 +72,11 @@ export function parseActiveRemote(raw: string, aliases: Map<string, string>): Ar
   }
 }
 
+/** A missing branch in Orca's focused context cannot disprove the host's focused worktree. */
+export function focusedBranchMatches(contextBranch: string | null, worktreeBranch: string | null): boolean {
+  return worktreeBranch !== null && (contextBranch === null || worktreeBranch === contextBranch)
+}
+
 export interface OrcaState {
   /** Orca host id (`ssh:…`, `runtime:…`) → ssh alias. */
   aliases: Map<string, string>
